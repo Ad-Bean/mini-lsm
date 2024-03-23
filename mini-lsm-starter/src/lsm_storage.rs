@@ -347,13 +347,23 @@ impl LsmStorageInner {
     pub fn force_freeze_memtable(&self, _state_lock_observer: &MutexGuard<'_, ()>) -> Result<()> {
         let memtable_id = self.next_sst_id();
         let memtable = if self.options.enable_wal {
-            MemTable::create_with_wal(memtable_id, self.path_of_wal(memtable_id))?
+            Arc::new(MemTable::create_with_wal(
+                memtable_id,
+                self.path_of_wal(memtable_id),
+            )?)
         } else {
-            MemTable::create(memtable_id)
+            Arc::new(MemTable::create(memtable_id))
         };
+        let mut state = self.state.write(); // acquire the lock
+        let mut snapshot = state.as_ref().clone(); // first use as_ref() to convert Arc to &Arc and then clone() to make it mutable
 
-        let state = self.state.write();
-        state.imm_memtables.insert(0, state.memtable.clone()); // insert to the front
+        let old_memtable = std::mem::replace(&mut snapshot.memtable, memtable);
+        snapshot.imm_memtables.insert(0, old_memtable.clone()); // insert to the front
+
+        *state = Arc::new(snapshot); // update the state
+        drop(state); // release the lock
+
+        // old_memtable.sync_wal()?;
         Ok(())
     }
 

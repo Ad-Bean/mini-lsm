@@ -85,7 +85,7 @@ impl MemTable {
         let sz = key.len() + value.len();
         self.map
             .insert(Bytes::copy_from_slice(key), Bytes::copy_from_slice(value));
-        self.approximate_size.fetch_add(sz, Ordering::SeqCst); // or Relaxed
+        self.approximate_size.fetch_add(sz, Ordering::Relaxed); // or SeqCst?
         Ok(())
     }
 
