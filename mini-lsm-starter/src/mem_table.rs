@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use anyhow::Result;
-use bytes::Bytes;
+use bytes::{Buf, Bytes};
 use crossbeam_skiplist::SkipMap;
 use ouroboros::self_referencing;
 
@@ -97,8 +97,14 @@ impl MemTable {
     }
 
     /// Get an iterator over a range of keys.
-    pub fn scan(&self, _lower: Bound<&[u8]>, _upper: Bound<&[u8]>) -> MemTableIterator {
-        unimplemented!()
+    pub fn scan(&self, lower: Bound<&[u8]>, upper: Bound<&[u8]>) -> MemTableIterator {
+        let mut iter = MemTableIterator::new(
+            self.map.clone(),                                      // Arc<SkipMap<Bytes, Bytes>>
+            |map| map.range((map_bound(lower), map_bound(upper))), // iter FnOnce
+            (Bytes::new(), Bytes::new()),                          // Stores the key-value pair.
+        );
+        iter.next().unwrap();
+        iter
     }
 
     /// Flush the mem-table to SSTable. Implement in week 1 day 6.
@@ -144,18 +150,21 @@ impl StorageIterator for MemTableIterator {
     type KeyType<'a> = KeySlice<'a>;
 
     fn value(&self) -> &[u8] {
-        unimplemented!()
+        &self.borrow_item().1.chunk()
     }
 
     fn key(&self) -> KeySlice {
-        unimplemented!()
+        KeySlice::from_slice(&self.borrow_item().0.chunk())
     }
 
     fn is_valid(&self) -> bool {
-        unimplemented!()
+        !&self.borrow_item().0.is_empty()
     }
 
     fn next(&mut self) -> Result<()> {
-        unimplemented!()
+        let entry = self.with_iter_mut(|iter| iter.next());
+        let item = entry.map(|en| (en.key().clone(), en.value().clone()));
+        self.with_mut(|iter| *iter.item = item.unwrap_or_default());
+        Ok(())
     }
 }
