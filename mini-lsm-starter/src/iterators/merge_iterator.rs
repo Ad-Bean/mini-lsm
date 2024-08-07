@@ -103,10 +103,8 @@ impl<I: 'static + for<'a> StorageIterator<KeyType<'a> = KeySlice<'a>>> StorageIt
                 if let Err(e) = res {
                     PeekMut::pop(iter);
                     return Err(e);
-                } else {
-                    if !iter.1.is_valid() {
-                        PeekMut::pop(iter);
-                    }
+                } else if !iter.1.is_valid() {
+                    PeekMut::pop(iter);
                 }
             } else {
                 break;

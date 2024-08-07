@@ -281,13 +281,16 @@ impl LsmStorageInner {
     /// Get a key from the storage. In day 7, this can be further optimized by using a bloom filter.
     pub fn get(&self, key: &[u8]) -> Result<Option<Bytes>> {
         let state = self.state.read();
-        if let Some(v) = state.memtable.get(key) {
+        // Take a reference to the state to avoid ownership transfer and unnecessary cloning
+        let snapshot = &state;
+
+        if let Some(v) = snapshot.memtable.get(key) {
             if v.is_empty() {
                 return Ok(None);
             }
             return Ok(Some(v));
         }
-        for memtable in state.imm_memtables.iter() {
+        for memtable in snapshot.imm_memtables.iter() {
             if let Some(v) = memtable.get(key) {
                 if v.is_empty() {
                     return Ok(None);
@@ -313,7 +316,11 @@ impl LsmStorageInner {
         }
         if size >= self.options.target_sst_size {
             let state_lock_observer = self.state_lock.lock();
-            self.force_freeze_memtable(&state_lock_observer)?
+            let guard = self.state.read();
+            if guard.memtable.approximate_size() >= self.options.target_sst_size {
+                drop(guard);
+                self.force_freeze_memtable(&state_lock_observer)?
+            }
         }
         Ok(())
     }
