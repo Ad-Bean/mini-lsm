@@ -26,12 +26,13 @@ impl Block {
 
     /// Decode from the data layout, transform the input `data` to a single `Block`
     pub fn decode(data: &[u8]) -> Self {
-        let offsets_len = (&data[data.len() - 2..data.len()]).get_u16() as usize;
-        let offsets = (&data[data.len() - 2 - offsets_len * 2..data.len() - 2])
+        // the last u16 is the num of elements
+        let num_of_elements = (&data[data.len() - 2..]).get_u16() as usize;
+        let offsets = (&data[data.len() - 2 - num_of_elements * 2..data.len() - 2])
             .chunks(2)
             .map(|mut chunk| chunk.get_u16())
             .collect();
-        let data = data[..data.len() - 2 - offsets_len * 2].to_vec();
+        let data = data[..data.len() - 2 - num_of_elements * 2].to_vec();
         Self { data, offsets }
     }
 }
