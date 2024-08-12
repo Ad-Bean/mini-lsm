@@ -67,18 +67,22 @@ impl BlockIterator {
     fn seek_to(&mut self, idx: usize) {
         if idx < self.block.offsets.len() {
             let offset = self.block.offsets[idx] as usize;
-            self.idx = idx;
-
+            // offset.... [entry: key_len.. key.. value_len.. value]
             let mut entry = &self.block.data[offset..];
+            // Since `get_u16()` will automatically move the ptr 2 bytes ahead here,
+            // we don't need to manually advance it
             let key_len = entry.get_u16() as usize;
-            let key = entry[..key_len].to_vec(); // clone
+            let key = entry[..key_len].to_vec();
+            entry.advance(key_len);
             self.key.clear();
             self.key.append(&key);
-
             let value_len = entry.get_u16() as usize;
-            // offset.... key_len.. key.. value_len.. value
-            let value_offset = offset + 2 + key_len + 2;
-            self.value_range = (value_offset, value_offset + value_len);
+            let value_offset_begin = offset + 2 + key_len + 2;
+            let value_offset_end = value_offset_begin + value_len;
+            self.value_range = (value_offset_begin, value_offset_end);
+            entry.advance(value_len);
+
+            self.idx = idx;
         } else {
             self.key.clear();
             self.value_range = (0, 0);
@@ -107,11 +111,13 @@ impl BlockIterator {
             self.seek_to(mid);
             if self.key().eq(&key) {
                 return;
-            } else if self.key().cmp(&key) == std::cmp::Ordering::Less {
+            } else if self.key().lt(&key) {
                 l = mid + 1;
             } else {
                 r = mid;
             }
         }
+        print!("l: {}, r: {}\n", l, r);
+        self.seek_to(l) // l == r, self.key() >= key
     }
 }
